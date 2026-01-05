@@ -2,7 +2,12 @@ from agent.log_monitor import analyze_logs
 from agent.severity_classifier import classify_severity
 from agent.agent.reporter import generate_report
 from agent.agent.ip_analyzer import analyze_ip_behavior, escalate_severity_if_needed
+from tools.tools.ip_blocker import block_ip
+from tools.tools.alert_system import send_alert
 import json
+
+def extract_ip(log_line):
+    return log_line.split()[0]
 
 def main():
     incidents = analyze_logs("logs/logs/access.log")
@@ -27,14 +32,27 @@ def main():
         report = escalate_severity_if_needed(report, ip_activity)
         final_reports.append(report)
 
+        ip = extract_ip(report["log"])
+
         print(f"{idx}. Severity: {report['severity']}")
         print(f"   Reason: {report['reason']}")
-        print(f"   Action: {report['recommended_action']}\n")
+
+        if report["severity"] == "HIGH":
+            result = block_ip(ip)
+            send_alert(report)
+            report["action_taken"] = result
+        elif report["severity"] == "MEDIUM":
+            send_alert(report)
+            report["action_taken"] = "Alert sent"
+        else:
+            report["action_taken"] = "Logged only"
+
+        print(f"   Action Taken: {report['action_taken']}\n")
 
     with open("memory/incidents.json", "w") as file:
         json.dump(final_reports, file, indent=4)
 
-    print(" Incident reports updated with IP behavior analysis")
+    print(" Incident reports updated with automated actions")
 
 if __name__ == "__main__":
     main()
